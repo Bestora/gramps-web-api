@@ -86,6 +86,8 @@ class DefaultConfig(object):
     NEW_DB_BACKEND = "sqlite"
     RATE_LIMIT_MEDIA_ARCHIVE = "1 per day"
     REGISTRATION_DISABLED = False
+    # if set, POST /api/token/share/ logs in (and creates) editors by name
+    SHARE_KEY = ""
     LOG_LEVEL = "INFO"
     LLM_BASE_URL = None
     LLM_MODEL = ""

@@ -19,6 +19,8 @@
 
 """Authentication endpoint blueprint."""
 
+import hmac
+import secrets
 from typing import Any, Iterable
 
 from flask import abort, current_app
@@ -34,11 +36,14 @@ from ...auth import (
     AUTH_STATUS_ACCOUNT_DISABLED,
     AUTH_STATUS_ACCOUNT_UNCONFIRMED,
     AUTH_STATUS_OK,
+    add_user,
     get_all_user_details,
     get_auth_status,
     get_guid,
     get_name,
     get_permissions,
+    get_user_details,
+    modify_user,
     is_tree_disabled,
     mark_access_token_used,
 )
@@ -48,6 +53,8 @@ from ...auth.const import (
     ACCESS_TOKEN_SCOPE_SYNC,
     CLAIM_LIMITED_SCOPE,
     PERM_VIEW_OTHER_TREE,
+    ROLE_EDITOR,
+    ROLE_GUEST,
     SCOPE_CREATE_ADMIN,
     SCOPE_CREATE_OWNER,
 )
@@ -203,6 +210,77 @@ class TokenResource(Resource):
             tree_id=tree_id,
             include_refresh=True,
             fresh=True,
+        )
+
+
+class TokenShareLoginSchema(Schema):
+    """Request body for POST /token/share/."""
+
+    key = fields.Str(
+        required=True,
+        validate=validate.Length(min=1),
+        load_only=True,
+        metadata={"description": "The share key from the share link."},
+    )
+    name = fields.Str(
+        required=True,
+        validate=validate.Length(min=1, max=100),
+        metadata={"description": "The full name of the person logging in."},
+    )
+
+
+def share_username(name: str) -> str:
+    """Normalize a full name to the username of its share account."""
+    return " ".join(name.split()).lower()
+
+
+class TokenShareResource(Resource):
+    """Resource for logging in with a share link and a full name.
+
+    Anyone holding the share key gets an Editor account for any name they
+    type: the account is created on first login. Accounts with a role above
+    Editor can never be reached this way.
+    """
+
+    @limiter.limit("1/second")
+    @api_blueprint.response(200, TokenPairSchema)
+    @api_blueprint.arguments(TokenShareLoginSchema, location="json")
+    def post(self, args):
+        """Exchange the share key and a full name for a token pair."""
+        share_key = current_app.config.get("SHARE_KEY")
+        if not share_key:
+            abort_with_message(404, "Share login is disabled")
+        # ponytail: single tree only; multi-tree needs a tree per share key
+        if current_app.config["TREE"] == TREE_MULTI:
+            abort_with_message(404, "Share login requires single-tree mode")
+        if not hmac.compare_digest(args["key"].encode(), share_key.encode()):
+            abort_with_message(403, "Invalid share key")
+        username = share_username(args["name"])
+        if not username:
+            abort_with_message(422, "Name must not be empty")
+        details = get_user_details(username)
+        if details is None:
+            add_user(
+                name=username,
+                # never used: share accounts only log in via the share key
+                password=secrets.token_urlsafe(32),
+                fullname=" ".join(args["name"].split()),
+                role=ROLE_EDITOR,
+            )
+            # assign the tree so the account shows up in user management
+            modify_user(username, tree=get_tree_id_or_none(get_guid(username)))
+        elif not ROLE_GUEST <= details["role"] <= ROLE_EDITOR:
+            abort_with_message(403, "Forbidden")
+        user_id = get_guid(username)
+        tree_id, permissions = get_tree_id_and_permissions(
+            user_id=user_id, username=username
+        )
+        return get_tokens(
+            user_id=user_id,
+            permissions=permissions,
+            tree_id=tree_id,
+            include_refresh=True,
+            fresh=False,
         )
 
 

@@ -147,6 +147,7 @@ from .resources.token import (
     TokenCreateOwnerResource,
     TokenRefreshResource,
     TokenResource,
+    TokenShareResource,
     TokenSyncResource,
 )
 from .resources.transactions import TransactionsResource
@@ -295,6 +296,7 @@ register_endpt(
 register_endpt(TokenResource, "/token/", "token", tags=["Token"])
 register_endpt(TokenRefreshResource, "/token/refresh/", "token_refresh", tags=["Token"])
 register_endpt(TokenSyncResource, "/token/sync/", "token_sync", tags=["Token"])
+register_endpt(TokenShareResource, "/token/share/", "token_share", tags=["Token"])
 register_endpt(
     TokenCreateOwnerResource,
     "/token/create_owner/",
