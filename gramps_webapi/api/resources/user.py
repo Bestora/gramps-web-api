@@ -38,10 +38,12 @@ from ...auth import (
     get_name,
     get_number_users,
     get_pwhash,
+    get_tree_config,
     get_user_details,
     get_user_details_page,
     get_user_oidc_accounts,
     modify_user,
+    set_tree_config,
 )
 from ...auth.oidc_helpers import is_oidc_enabled
 from ...auth.const import (
@@ -81,6 +83,7 @@ from ..tasks import (
 from ..util import (
     abort_with_message,
     get_tree_from_jwt,
+    get_tree_from_jwt_or_fail,
     get_tree_id,
     get_tree_id_or_none,
     tree_exists,
@@ -834,3 +837,48 @@ class UserConfirmEmailResource(LimitedScopeProtectedResource):
             "An administrator will review your account request."
         )
         return render_template("confirmation.html", title=title, message=message)
+
+
+USER_PERSONS_KEY = "frontend.userPersons"
+
+
+class UserPersonBodySchema(Schema):
+    """Body for PUT /users/<name>/person/."""
+
+    handle = fields.Str(
+        required=True,
+        validate=validate.Length(max=50),
+        metadata={
+            "description": "Handle of the person the account represents, "
+            "or an empty string to remove the link."
+        },
+    )
+
+
+class UserPersonResource(ProtectedResource):
+    """Link an account to the person it represents in the tree."""
+
+    @api_blueprint.response(200, UserPersonBodySchema)
+    @api_blueprint.arguments(UserPersonBodySchema, location="json")
+    def put(self, args, user_name: str):
+        """Store which person in the tree this account is."""
+        tree = get_tree_from_jwt_or_fail()
+        if user_name == "-":
+            require_permissions([PERM_EDIT_OWN_USER])
+            user_name = get_name(get_jwt_identity())
+        else:
+            require_permissions([PERM_EDIT_OTHER_USER])
+            details = get_user_details(user_name)
+            if details is None:
+                abort_with_message(404, "User not found")
+            if details["tree"] and details["tree"] != tree:
+                abort_with_message(403, "Forbidden")
+        config = dict(get_tree_config(tree))
+        persons = dict(config.get(USER_PERSONS_KEY) or {})
+        if args["handle"]:
+            persons[user_name] = args["handle"]
+        else:
+            persons.pop(user_name, None)
+        config[USER_PERSONS_KEY] = persons
+        set_tree_config(tree=tree, config=config)
+        return {"handle": args["handle"]}
