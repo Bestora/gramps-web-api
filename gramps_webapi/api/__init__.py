@@ -156,6 +156,7 @@ from .resources.trees import (
     CheckTreeResource,
     DisableTreeResource,
     EnableTreeResource,
+    SiteMetaResource,
     TreeConfigResource,
     TreeResource,
     TreesResource,
@@ -298,6 +299,7 @@ register_endpt(TokenResource, "/token/", "token", tags=["Token"])
 register_endpt(TokenRefreshResource, "/token/refresh/", "token_refresh", tags=["Token"])
 register_endpt(TokenSyncResource, "/token/sync/", "token_sync", tags=["Token"])
 register_endpt(TokenShareResource, "/token/share/", "token_share", tags=["Token"])
+register_endpt(SiteMetaResource, "/site-meta/", "site_meta", tags=["Trees"])
 register_endpt(
     TokenCreateOwnerResource,
     "/token/create_owner/",

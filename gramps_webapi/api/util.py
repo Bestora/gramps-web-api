@@ -698,17 +698,21 @@ def get_tree_id_or_none(guid: str) -> str | None:
             # multi-tree support enabled but user has no tree ID
             return None
         # needed for backwards compatibility: single-tree mode but user without tree ID
-        if current_app.config.get("TREE_ID"):
-            # TREE_ID is set: use dirname directly, never look up by name
-            tree_id = current_app.config["TREE_ID"]
-        else:
-            dbmgr = WebDbManager(
-                name=current_app.config["TREE"],
-                create_if_missing=False,
-                ignore_lock=current_app.config["IGNORE_DB_LOCK"],
-            )
-            tree_id = dbmgr.dirname
+        tree_id = get_single_tree_id()
     return tree_id
+
+
+def get_single_tree_id() -> str:
+    """Get the ID of the one tree in single-tree mode."""
+    if current_app.config.get("TREE_ID"):
+        # TREE_ID is set: use dirname directly, never look up by name
+        return current_app.config["TREE_ID"]
+    dbmgr = WebDbManager(
+        name=current_app.config["TREE"],
+        create_if_missing=False,
+        ignore_lock=current_app.config["IGNORE_DB_LOCK"],
+    )
+    return dbmgr.dirname
 
 
 def get_tree_id(guid: str) -> str:

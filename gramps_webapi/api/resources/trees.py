@@ -26,7 +26,9 @@ import re
 import uuid
 from typing import Dict, List, Optional
 
-from flask import abort, current_app, jsonify, request
+from html import escape
+
+from flask import Response, abort, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 from gramps.gen.config import config
 from marshmallow import INCLUDE, Schema, ValidationError, validates_schema
@@ -65,12 +67,13 @@ from ..tasks import (
 )
 from ..blueprint import api_blueprint
 from ..util import (
+    get_single_tree_id,
     abort_with_message,
     get_tree_from_jwt,
     get_tree_from_jwt_or_fail,
     list_trees,
 )
-from . import ProtectedResource
+from . import ProtectedResource, Resource
 from .schemas import TreeConfigSchema, TreeSchema
 
 # legal tree dirnames
@@ -418,3 +421,40 @@ class TreeConfigResource(ProtectedResource):
             abort(404)
         set_tree_config(tree=tree_id, config=args)
         return jsonify(args)
+
+
+SITE_TITLE_KEY = "frontend.siteTitle"
+SITE_DESCRIPTION_KEY = "frontend.siteDescription"
+DEFAULT_SITE_TITLE = "Gramps Web"
+DEFAULT_SITE_DESCRIPTION = "Gramps Web - research & organize your family tree together"
+
+
+class SiteMetaResource(Resource):
+    """The page title and description, as HTML for the page head.
+
+    Public, because link previews (messengers) fetch the page without logging
+    in. nginx includes it into index.html via SSI.
+    """
+
+    def get(self):
+        """Get the title and description tags set by an admin."""
+        # ponytail: single tree only; multi-tree has no tree before login
+        tree = None
+        if current_app.config["TREE"] != TREE_MULTI:
+            tree = get_single_tree_id()
+        config = get_tree_config(tree) if tree else {}
+        title = escape(
+            config.get(SITE_TITLE_KEY)
+            or config.get("frontend.appTitle")
+            or DEFAULT_SITE_TITLE
+        )
+        description = escape(
+            config.get(SITE_DESCRIPTION_KEY) or DEFAULT_SITE_DESCRIPTION
+        )
+        html = (
+            f"<title>{title}</title>"
+            f'<meta name="description" content="{description}">'
+            f'<meta property="og:title" content="{title}">'
+            f'<meta property="og:description" content="{description}">'
+        )
+        return Response(html, mimetype="text/html")
